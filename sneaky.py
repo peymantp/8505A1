@@ -6,11 +6,11 @@ import argparse
 import time
 from scapy.all import *
 
-'''
+"""
 Program argument initialization 
-./sneaky.py -s 192.168.0.4 -sport 80 -d 192.168.0.7 -dport 80 -f ./sneaky.py -t TCP -mode server
+./sneaky.py -s 192.168.0.4 -sport 80 -d 192.168.0.7 -dport 80 -f ./sneaky.py -t TCP -mode client
 sudo python3 sneaky.py -f ./server.py -t TCP -mode server
-'''
+"""
 arg_parser = argparse.ArgumentParser(
     prog='Covert Channel',
     description='COMP 8505 Assignment 1 by Peyman Tehrani Parsa'
@@ -30,47 +30,69 @@ que_in=[]
 packet_num=0
 
 def client_input():
+    """ Checks if the user has decided to send a file or a message """
+    global que_out
     if args.file is not None:
         print('reading file')
         with open(args.file, 'r') as f:
             que_out = f.read()
-        print(que_out)
     elif args.msg is not None:
         que_out = args.msg
     else:
-        print('Select either file or massage to send')
+        print('Select either file or message to send')
         exit()
 
 def craft(character):
+    """
+    Packet crafting with scapy. The content being sent gets divided into characters and placed inside the TTL
+    
+    Keyword arguments:
+    character -- Content being sent with the packet 
+
+    Return:
+    Packet object
+    """
     global packet_num
     dport=int(args.des_port)
     sport=int(args.src_port)
-    #char = character.encode('utf-8')
-    char = ord(character)
+    char = ord(character) #turn character into UTF8 equivalent 
     if args.transport == 'TCP':
-        pck=IP(dst=args.des_ip, src=args.src_ip,ttl=char)/TCP(sport=packet_num,dport=dport,flags="SE")
+        pck=IP(dst=args.des_ip, src=args.src_ip,ttl=char)/TCP(sport=sport,dport=dport,flags="SE")
     elif args.transport == 'UDP':
-        pck=IP(dst=args.des_ip, src=args.src_ip,ttl=char)/UDP(sport=packet_num,dport=dport)
-    packet_num=1+packet_num
+        pck=IP(dst=args.des_ip, src=args.src_ip,ttl=char)/UDP(sport=sport,dport=dport) 
+    packet_num=1+packet_num #for testing
     return pck
     
 def client():
+    """
+    For every character in message create packet and send
+    """
+    global que_out
     for char in que_out:
         pkt = craft(char)
         print(pkt)
         send(pkt)
-        #time.sleep(RandNum(1,4))
+        time.sleep(RandNum(1,4)) #wait between sending packets to make detection harder
 
 def parse_tcp(pkt: Packet):
+    """
+    Parse TCP packets for SE flags and store hidden information
+    
+    Keyword arguments:
+    pkt -- Packet being read
+    """
     flags=pkt['TCP'].flags
     if flags == 0x042:
         que_in.append(chr(pkt['IP'].ttl))
-        print(''.join(que_in))
+        print(''.join(que_in)) #for testing purposes
         
 def parse_udp(pck):
     return pck
 
 def server():
+    """
+    If in server mode launches the packet
+    """
     if args.transport == 'TCP':
         print('Detecting TCP packets')
         sniff(filter="tcp", prn=parse_tcp)
@@ -78,8 +100,9 @@ def server():
         print('Detecting UDP packets')
         sniff(filter="udp", prn=parse_udp)
 
+
 if args.mode == 'server':
     server()
 elif args.mode == 'client':
-    input()
     client_input()
+    client()
